@@ -4,6 +4,8 @@ __pycache__/
 *$py.class
 
 datasets
+labels.txt
+*.npy
 
 # C extensions
 *.so
