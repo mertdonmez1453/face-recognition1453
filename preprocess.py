@@ -2,16 +2,7 @@ import os
 import cv2
 import numpy as np
 
-try:
-    import tensorflow as tf
-    TF_AVAILABLE = True
-except Exception:
-    TF_AVAILABLE = False
-else:
-    try:
-        from tensorflow.keras.applications.efficientnet import EfficientNetB0, preprocess_input
-    except Exception:
-        TF_AVAILABLE = False
+from resize import resize_dataset
 
 try:
     import torch
@@ -57,6 +48,37 @@ def load_images_to_tensor(input_dir, image_size=(224, 224), normalize=True):
     return np.stack(images, axis=0), labels, paths
 
 
+def _has_image_subfolders(directory):
+    if not os.path.isdir(directory):
+        return False
+
+    for person_name in os.listdir(directory):
+        person_path = os.path.join(directory, person_name)
+        if not os.path.isdir(person_path):
+            continue
+        for img_name in os.listdir(person_path):
+            img_path = os.path.join(person_path, img_name)
+            if os.path.isfile(img_path):
+                return True
+    return False
+
+
+def ensure_scaled_dataset(source_dir="datasets/Faces-Datasets", scaled_dir="datasets/Faces-Datasets-scaled"):
+    if _has_image_subfolders(scaled_dir):
+        return scaled_dir
+
+    if not _has_image_subfolders(source_dir):
+        raise ValueError(
+            f"Source dataset directory does not contain valid images: {source_dir}. "
+            "Please add unscaled images under datasets/Faces-Datasets or provide a scaled dataset."
+        )
+
+    os.makedirs(scaled_dir, exist_ok=True)
+    print(f"Scaling dataset from {source_dir} to {scaled_dir}...")
+    resize_dataset(source_dir, scaled_dir)
+    return scaled_dir
+
+
 def images_to_efficientnet_features(images, batch_size=32, model=None):
     if TORCH_AVAILABLE:
         try:
@@ -96,18 +118,10 @@ def images_to_efficientnet_features(images, batch_size=32, model=None):
         except Exception as e:
             raise RuntimeError(f"PyTorch EfficientNet extraction failed: {e}")
 
-    if not TF_AVAILABLE:
-        raise RuntimeError("Neither PyTorch nor TensorFlow is available")
+    if not TORCH_AVAILABLE:
+        raise RuntimeError("PyTorch is required for EfficientNet feature extraction")
 
-    try:
-        if model is None:
-            model = EfficientNetB0(weights='imagenet', include_top=False, pooling='avg', input_shape=(224, 224, 3))
-    except Exception as e:
-        raise RuntimeError(f"Failed to load EfficientNet model: {e}")
-
-    imgs = (images * 255.0).astype(np.float32)
-    imgs = preprocess_input(imgs)
-    return model.predict(imgs, batch_size=batch_size, verbose=1)
+    raise RuntimeError("PyTorch feature extraction fallback should not be reached")
 
 
 def _load_labels(path):
@@ -122,6 +136,9 @@ def _save_labels(path, labels):
 
 
 def build_images(source_dir="datasets/Faces-Datasets-scaled"):
+    if source_dir == "datasets/Faces-Datasets-scaled":
+        source_dir = ensure_scaled_dataset()
+
     imgs, labels, paths = load_images_to_tensor(source_dir, normalize=True)
     np.save("images.npy", imgs)
     _save_labels("labels.txt", labels)
