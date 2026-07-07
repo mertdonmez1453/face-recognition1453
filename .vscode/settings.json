@@ -1,8 +1,7 @@
 {
- "workbench.localHistory.enabled": true,
- "workbench.localHistory.maxFileEntries": 1800,
- "workbench.localHistory.maxFileSize": 10240,
- "workbench.localHistory.mergeWindow": 30,
- "files.autoSave": "afterDelay",
- "files.autoSaveDelay": 60000
+"workbench.localHistory.enabled": true,
+"workbench.localHistory.maxFileEntries": 2400,
+"workbench.localHistory.maxFileSize": 8192,
+"workbench.localHistory.mergeWindow": 60,
+"files.autoSave": "onFocusChange",
 }

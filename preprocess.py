@@ -79,7 +79,7 @@ def ensure_scaled_dataset(source_dir="datasets/Faces-Datasets", scaled_dir="data
     return scaled_dir
 
 
-def images_to_efficientnet_features(images, batch_size=32, model=None):
+def images_to_efficientnet_features(images, batch_size=8, model=None):
     if TORCH_AVAILABLE:
         try:
             import torch.nn as nn
@@ -99,19 +99,40 @@ def images_to_efficientnet_features(images, batch_size=32, model=None):
             else:
                 feature_extractor = model.to(device)
 
-            imgs_t = torch.from_numpy(images).permute(0, 3, 1, 2).to(dtype=torch.float32, device=device)
+            # Define normalization constants
             mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1, 3, 1, 1)
             std = torch.tensor([0.229, 0.224, 0.225], device=device).view(1, 3, 1, 1)
-            imgs_t = (imgs_t - mean) / std
 
             feats_list = []
             with torch.no_grad():
-                for i in range(0, imgs_t.shape[0], batch_size):
-                    batch = imgs_t[i:i + batch_size]
-                    out = feature_extractor(batch)
-                    out = out.view(out.size(0), -1)
+                # Use mixed precision for memory efficiency on GPU
+                use_amp = device.type == 'cuda'
+                autocast = torch.cuda.amp.autocast if use_amp else lambda: torch.no_op()
+                
+                # Process in batches to avoid GPU memory overflow
+                for i in range(0, images.shape[0], batch_size):
+                    # Load batch to GPU
+                    batch_np = images[i:i + batch_size]
+                    batch_t = torch.from_numpy(batch_np).permute(0, 3, 1, 2).to(dtype=torch.float32, device=device)
+                    
+                    # Normalize batch
+                    batch_t = (batch_t - mean) / std
+                    
+                    # Extract features with mixed precision on GPU
+                    with autocast():
+                        out = feature_extractor(batch_t)
+                    out = out.view(out.size(0), -1).float()
                     feats_list.append(out.cpu().numpy())
+                    
+                    # Clear GPU cache between batches
+                    if use_amp:
+                        torch.cuda.empty_cache()
+                    
+                    # Progress indicator
+                    processed = min(i + batch_size, images.shape[0])
+                    print(f"  Processed {processed}/{images.shape[0]} images...", end='\r')
 
+            print(f"  Processed {images.shape[0]}/{images.shape[0]} images - Done!        ")
             if not feats_list:
                 return np.empty((0, 1280), dtype=np.float32)
             return np.vstack(feats_list)
