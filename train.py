@@ -1,6 +1,7 @@
 import os
 import cv2
 import numpy as np
+from pathlib import Path
 from preprocess import features, labels
 
 from sklearn.neighbors import KNeighborsClassifier
@@ -9,10 +10,31 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, f1_score, classification_report
 from sklearn.model_selection import train_test_split
 
-from sklearn.preprocessing import normalize
-
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn.preprocessing import normalize, LabelEncoder
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+OUTPUT_DIR = Path("outputs")
+OUTPUT_DIR.mkdir(exist_ok=True)
+
+
+def save_confusion_matrix_png(y_true, y_pred, class_names, filename):
+    cm = confusion_matrix(y_true, y_pred, labels=np.arange(len(class_names)))
+    fig, ax = plt.subplots(figsize=(8, 6))
+    im = ax.imshow(cm, interpolation="nearest", cmap="viridis")
+
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    fig.tight_layout()
+    output_path = OUTPUT_DIR / filename
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved confusion matrix: {output_path}")
 
 
 # normalize the features
@@ -24,15 +46,25 @@ print(f"Loaded labels: {len(labels)}")
 
 
 ##split dataset into train and test
-X_train_val, X_test, y_train_val, y_test = train_test_split(features,labels, test_size=0.2, stratify=labels, random_state=42, shuffle=True)
+label_encoder = LabelEncoder()
+encoded_labels = label_encoder.fit_transform(labels)
 
+X_train_val, X_test, y_train_val, y_test = train_test_split(
+    features,
+    encoded_labels,
+    test_size=0.2,
+    stratify=encoded_labels,
+    random_state=42,
+    shuffle=True,
+)
 
 # split train+val into train (75% of 80% = 60%) and validation (25% of 80% = 20%)
 X_train, X_val, y_train, y_val = train_test_split(
-    X_train_val, y_train_val,
-    test_size=0.25,          # 25% of train+val becomes validation
+    X_train_val,
+    y_train_val,
+    test_size=0.25,
     random_state=42,
-    shuffle=True
+    shuffle=True,
 )
 
 print(f"\nData split:")
@@ -46,12 +78,12 @@ X_val_orig = X_val.copy()
 X_test_orig = X_test.copy()
 
 
-KNN_train = False
+KNN_train = True
 
 if KNN_train == True:
 
-    k_values = [1, 3, 5]
-    pca_variances = [0.55, 0.90, 0.95, 0.97, 0.99]
+    k_values = [1]
+    pca_variances = [0.97]
 
     best_val_f1 = -1.0
     best_k = None
@@ -114,24 +146,39 @@ if KNN_train == True:
     print(f"    Test recall:     {final_recall:.4f}")
     print(f"    Test F1:         {final_f1:.4f}")
 
+    save_confusion_matrix_png(
+        y_test,
+        final_y_pred,
+        label_encoder.classes_,
+        "knn_confusion_matrix.png",
+    )
+
 
 
 ### decison tree model training
 
-treeTrain = False
+treeTrain = True
 
 if treeTrain == True:
     from sklearn.tree import DecisionTreeClassifier, plot_tree
 
     # Try different hyperparameters
-    criterions = ['gini', 'entropy']
-    splitters = ['best', 'random']
-    max_depths = [20, 40, 60]
-    min_samples_leafs = [4, 5]
-    pca_components = [0.65, 0.85, 0.90, 0.99]
+    criterions = ['entropy']
+    max_depths = [500]
+    min_samples_leafs = [1]
+    pca_components = [0.90]
     best_val_f1 = -1.0
     best_params = None
     best_tree_model = None
+
+    print("\n=== Decision Tree Hyperparameter Tuning ===")
+    total_combinations = len(criterions) * len(max_depths) * len(min_samples_leafs) * len(pca_components)
+    print("Tuning criterion, max_depth, min_samples_leaf, and PCA components")
+    print(f"Total combinations: {total_combinations}")
+    print(f"PCA values: {pca_components}")
+    print(f"Max depths: {max_depths}")
+    print(f"Min samples leaf: {min_samples_leafs}")
+    print()
 
     counter = 0
     for pca_ratio in pca_components:
@@ -140,47 +187,42 @@ if treeTrain == True:
         X_val = pca.transform(X_val_orig)          # Transform validation data
         X_test = pca.transform(X_test_orig)        # Transform test data
 
-        # NO NORMALIZATION - Decision Tree doesn't need it
 
         for criterion in criterions:
-            for splitter in splitters:
-                for depth in max_depths:
-                    for min_leaf in min_samples_leafs:
-                        counter += 1
-                        tree_clf = DecisionTreeClassifier(
-                            criterion=criterion,
-                            splitter=splitter,
-                            max_depth=depth,
-                            min_samples_leaf=min_leaf,
-                            random_state=42,
-                        )
-                        tree_clf.fit(X_train_orig, y_train)
-                        
-                        y_val_pred = tree_clf.predict(X_val_orig)
-                        val_accuracy = accuracy_score(y_val, y_val_pred)
-                        val_precision = precision_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                        val_recall = recall_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                        val_f1 = f1_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                        
-                        result_text = f"[{counter:5d}/{total_combinations}] PCA={pca_ratio:.2f} | criterion={criterion:10s} | splitter={splitter:6s} | depth={depth:3d} | min_leaf={min_leaf} | F1: {val_f1:.4f} | Acc: {val_accuracy:.4f}"
-                        print(result_text)
-                        
-                        if val_f1 > best_val_f1:
-                            best_val_f1 = val_f1
-                            best_params = {
-                                'pca_ratio': pca_ratio,
-                                'criterion': criterion,
-                                'splitter': splitter,
-                                'max_depth': depth,
-                                'min_samples_leaf': min_leaf
-                            }
-                            best_tree_model = tree_clf
-                            best_X_test = X_test
+            for depth in max_depths:
+                for min_leaf in min_samples_leafs:
+                    counter += 1
+                    tree_clf = DecisionTreeClassifier(
+                        criterion=criterion,
+                        max_depth=depth,
+                        min_samples_leaf=min_leaf,
+                        random_state=42,
+                    )
+                    tree_clf.fit(X_train, y_train)
+
+                    y_val_pred = tree_clf.predict(X_val)
+                    val_accuracy = accuracy_score(y_val, y_val_pred)
+                    val_precision = precision_score(y_val, y_val_pred, average='weighted', zero_division=0)
+                    val_recall = recall_score(y_val, y_val_pred, average='weighted', zero_division=0)
+                    val_f1 = f1_score(y_val, y_val_pred, average='weighted', zero_division=0)
+
+                    result_text = f"[{counter:5d}/{total_combinations}] PCA={pca_ratio:.2f} | criterion={criterion:10s} | depth={depth:3d} | min_leaf={min_leaf} | F1: {val_f1:.4f} | Acc: {val_accuracy:.4f}"
+                    print(result_text)
+
+                    if val_f1 > best_val_f1:
+                        best_val_f1 = val_f1
+                        best_params = {
+                            'pca_ratio': pca_ratio,
+                            'criterion': criterion,
+                            'max_depth': depth,
+                            'min_samples_leaf': min_leaf
+                        }
+                        best_tree_model = tree_clf
+                        best_X_test = X_test
 
     best_text = f"""
 PCA ratio:          {best_params['pca_ratio']:.2f}
 Criterion:          {best_params['criterion']}
-Splitter:           {best_params['splitter']}
 Max depth:          {best_params['max_depth']}
 Min samples leaf:   {best_params['min_samples_leaf']}
 Best val F1:        {best_val_f1:.4f}
@@ -200,7 +242,6 @@ Final Test Results
 {"-" * 120}
 PCA ratio:          {best_params['pca_ratio']:.2f}
 Criterion:          {best_params['criterion']}
-Splitter:           {best_params['splitter']}
 Max depth:          {best_params['max_depth']}
 Min samples leaf:   {best_params['min_samples_leaf']}
 Test accuracy:      {test_accuracy:.4f}
@@ -211,6 +252,13 @@ Test F1:            {test_f1:.4f}
 """
     print(final_text)
 
+    save_confusion_matrix_png(
+        y_test,
+        y_test_pred,
+        label_encoder.classes_,
+        "decision_tree_confusion_matrix.png",
+    )
+
 
 
 randomForestTrain = True
@@ -220,10 +268,10 @@ if randomForestTrain == True:
     from sklearn.ensemble import RandomForestClassifier
 
     # Try different hyperparameters
-    max_features = ['sqrt', 'log2', None]
-    n_estimators = [50,  150,  250, 300]
-    max_depths = [10, 20, 30, 100]
-    pca_components = [0.50, 0.90, 0.99]
+    max_features = ['sqrt']
+    n_estimators = [700]
+    max_depths = [100]
+    pca_components = [0.90]
     best_val_f1 = -1.0
     best_params = None
     best_rf_model = None
@@ -315,119 +363,219 @@ Test F1:         {test_f1:.4f}
 """
     print(final_text)
 
+    save_confusion_matrix_png(
+        y_test,
+        y_test_pred,
+        label_encoder.classes_,
+        "random_forest_confusion_matrix.png",
+    )
 
-gradientBoostingTrain = False
+
+gradientBoostingTrain = True
 
 if gradientBoostingTrain == True:
+    try:
+        import xgboost as xgb
+        from xgboost import XGBClassifier
+        xgb_available = True
+    except Exception as e:
+        xgb_available = False
+        print(f"XGBoost unavailable, falling back to sklearn: {e}")
 
-    from sklearn.ensemble import GradientBoostingClassifier
+    if xgb_available:
+        try:
+            import torch
+            gpu_available = torch.cuda.is_available()
+        except Exception:
+            gpu_available = False
 
-    # Try different hyperparameters
-    losses = ['log_loss', 'exponential']
-    learning_rates = [0.01, 0.15, 0.2]
-    n_estimators = [50, 150, 300]
-    max_depths = [3, 7, 10]
-    min_samples_splits = [2, 5, 10]
-    pca_components = [0.50, 0.90, 0.99]
-    best_val_f1 = -1.0
-    best_params = None
-    best_gb_model = None
+        tree_method = 'hist'
+        device = 'cuda' if gpu_available else 'cpu'
 
-    print("\n=== Gradient Boosting Hyperparameter Tuning ===")
-    total_combinations = len(losses) * len(learning_rates) * len(n_estimators) * len(max_depths) * len(min_samples_splits) * len(pca_components)
-    print("Tuning loss, learning_rate, n_estimators, max_depth, min_samples_split, and PCA components")
-    print(f"Total combinations: {total_combinations}")
-    print(f"PCA values: {pca_components}")
-    print(f"Max depths: {max_depths}")
-    print(f"N estimators: {n_estimators}")
-    print(f"Learning rates: {learning_rates}")
-    print(f"Losses: {losses}")
-    print(f"Min samples split: {min_samples_splits}")
-    print()
+        learning_rates = [0.1]
+        max_depths = [3]
+        pca_components = [0.90]
+        best_val_f1 = -1.0
+        best_params = None
+        best_gb_model = None
 
-    counter = 0
-    for pca_ratio in pca_components:
-        pca = PCA(n_components=pca_ratio)
-        X_train = pca.fit_transform(X_train_orig)  # Fit PCA on training data
-        X_val = pca.transform(X_val_orig)          # Transform validation data
-        X_test = pca.transform(X_test_orig)        # Transform test data
+        print("\n=== Gradient Boosting Hyperparameter Tuning (XGBoost) ===")
+        total_combinations = len(learning_rates) * len(max_depths) * len(pca_components)
+        print("Tuning learning_rate, max_depth, and PCA components")
+        print(f"Total combinations: {total_combinations}")
+        print(f"PCA values: {pca_components}")
+        print(f"Max depths: {max_depths}")
+        print(f"Learning rates: {learning_rates}")
+        print(f"Training backend: {device} ({tree_method})")
+        print()
 
-        # Normalize after PCA
-        X_train_norm = normalize(X_train)
-        X_val_norm = normalize(X_val)
-        X_test_norm = normalize(X_test)
+        counter = 0
+        for pca_ratio in pca_components:
+            pca = PCA(n_components=pca_ratio)
+            X_train = pca.fit_transform(X_train_orig)
+            X_val = pca.transform(X_val_orig)
+            X_test = pca.transform(X_test_orig)
 
-        for loss in losses:
+            X_train_norm = normalize(X_train)
+            X_val_norm = normalize(X_val)
+            X_test_norm = normalize(X_test)
+
             for lr in learning_rates:
-                for n_est in n_estimators:
-                    for depth in max_depths:
-                        for min_split in min_samples_splits:
-                            counter += 1
-                            gb_clf = GradientBoostingClassifier(
-                                loss=loss,
-                                learning_rate=lr,
-                                n_estimators=n_est,
-                                max_depth=depth,
-                                min_samples_split=min_split,
-                                random_state=42
-                            )
-                            gb_clf.fit(X_train_norm, y_train)
-                            
-                            y_val_pred = gb_clf.predict(X_val_norm)
-                            val_accuracy = accuracy_score(y_val, y_val_pred)
-                            val_precision = precision_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                            val_recall = recall_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                            val_f1 = f1_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                            
-                            result_text = f"[{counter:6d}/{total_combinations}] PCA={pca_ratio:.2f} | loss={loss:11s} | lr={lr:.2f} | n_est={n_est:3d} | depth={depth:2d} | min_split={min_split:2d} | F1: {val_f1:.4f} | Acc: {val_accuracy:.4f}"
-                            print(result_text)
-                            
-                            if val_f1 > best_val_f1:
-                                best_val_f1 = val_f1
-                                best_params = {
-                                    'pca_ratio': pca_ratio,
-                                    'loss': loss,
-                                    'learning_rate': lr,
-                                    'n_estimators': n_est,
-                                    'max_depth': depth,
-                                    'min_samples_split': min_split
-                                }
-                                best_gb_model = gb_clf
-                                best_X_test = X_test_norm
+                for depth in max_depths:
+                    counter += 1
+                    gb_clf = XGBClassifier(
+                        learning_rate=lr,
+                        max_depth=depth,
+                        n_estimators=200,
+                        objective='multi:softprob',
+                        eval_metric='mlogloss',
+                        random_state=42,
+                        tree_method=tree_method,
+                        device=device,
+                        n_jobs=4,
+                    )
+                    gb_clf.fit(X_train_norm, y_train)
 
-    best_text = f"""
+                    y_val_pred = gb_clf.predict(X_val_norm)
+                    val_accuracy = accuracy_score(y_val, y_val_pred)
+                    val_precision = precision_score(y_val, y_val_pred, average='weighted', zero_division=0)
+                    val_recall = recall_score(y_val, y_val_pred, average='weighted', zero_division=0)
+                    val_f1 = f1_score(y_val, y_val_pred, average='weighted', zero_division=0)
+
+                    result_text = f"[{counter:6d}/{total_combinations}] PCA={pca_ratio:.2f} | lr={lr:.2f} | depth={depth:2d} | F1: {val_f1:.4f} | Acc: {val_accuracy:.4f}"
+                    print(result_text)
+
+                    if val_f1 > best_val_f1:
+                        best_val_f1 = val_f1
+                        best_params = {
+                            'pca_ratio': pca_ratio,
+                            'learning_rate': lr,
+                            'max_depth': depth
+                        }
+                        best_gb_model = gb_clf
+                        best_X_test = X_test_norm
+
+        best_text = f"""
 PCA ratio:       {best_params['pca_ratio']:.2f}
-Loss:            {best_params['loss']}
 Learning rate:   {best_params['learning_rate']}
-N estimators:    {best_params['n_estimators']}
 Max depth:       {best_params['max_depth']}
-Min samples split: {best_params['min_samples_split']}
 Best val F1:     {best_val_f1:.4f}
 """
-    print(best_text)
+        print(best_text)
 
-    # Final test evaluation with best model
-    y_test_pred = best_gb_model.predict(best_X_test)
-    test_accuracy = accuracy_score(y_test, y_test_pred)
-    test_precision = precision_score(y_test, y_test_pred, average='weighted', zero_division=0)
-    test_recall = recall_score(y_test, y_test_pred, average='weighted', zero_division=0)
-    test_f1 = f1_score(y_test, y_test_pred, average='weighted', zero_division=0)
+        y_test_pred = best_gb_model.predict(best_X_test)
+        test_accuracy = accuracy_score(y_test, y_test_pred)
+        test_precision = precision_score(y_test, y_test_pred, average='weighted', zero_division=0)
+        test_recall = recall_score(y_test, y_test_pred, average='weighted', zero_division=0)
+        test_f1 = f1_score(y_test, y_test_pred, average='weighted', zero_division=0)
 
-    final_text = f"""
+        final_text = f"""
 {"-" * 140}
 Final Test Results
 {"-" * 140}
 PCA ratio:           {best_params['pca_ratio']:.2f}
-Loss:                {best_params['loss']}
 Learning rate:       {best_params['learning_rate']:.2f}
-N estimators:        {best_params['n_estimators']}
 Max depth:           {best_params['max_depth']}
-Min samples split:   {best_params['min_samples_split']}
 Test accuracy:       {test_accuracy:.4f}
 Test precision:      {test_precision:.4f}
 Test recall:         {test_recall:.4f}
 Test F1:             {test_f1:.4f}
 {"-" * 140}
 """
-    print(final_text)
+        print(final_text)
+
+        save_confusion_matrix_png(
+            y_test,
+            y_test_pred,
+            label_encoder.classes_,
+            "gradient_boosting_confusion_matrix.png",
+        )
+    else:
+        from sklearn.ensemble import GradientBoostingClassifier
+
+        learning_rates = [0.01, 0.05, 0.2]
+        max_depths = [2, 6]
+        pca_components = [0.50, 0.90, 0.99]
+        best_val_f1 = -1.0
+        best_params = None
+        best_gb_model = None
+
+        print("\n=== Gradient Boosting Hyperparameter Tuning (sklearn fallback) ===")
+        total_combinations = len(learning_rates) * len(max_depths) * len(pca_components)
+        print("Tuning learning_rate, max_depth, and PCA components")
+        print(f"Total combinations: {total_combinations}")
+        print(f"PCA values: {pca_components}")
+        print(f"Max depths: {max_depths}")
+        print(f"Learning rates: {learning_rates}")
+        print()
+
+        counter = 0
+        for pca_ratio in pca_components:
+            pca = PCA(n_components=pca_ratio)
+            X_train = pca.fit_transform(X_train_orig)
+            X_val = pca.transform(X_val_orig)
+            X_test = pca.transform(X_test_orig)
+
+            X_train_norm = normalize(X_train)
+            X_val_norm = normalize(X_val)
+            X_test_norm = normalize(X_test)
+
+            for lr in learning_rates:
+                for depth in max_depths:
+                    counter += 1
+                    gb_clf = GradientBoostingClassifier(
+                        learning_rate=lr,
+                        n_estimators=100,
+                        max_depth=depth,
+                        random_state=42
+                    )
+                    gb_clf.fit(X_train_norm, y_train)
+
+                    y_val_pred = gb_clf.predict(X_val_norm)
+                    val_accuracy = accuracy_score(y_val, y_val_pred)
+                    val_precision = precision_score(y_val, y_val_pred, average='weighted', zero_division=0)
+                    val_recall = recall_score(y_val, y_val_pred, average='weighted', zero_division=0)
+                    val_f1 = f1_score(y_val, y_val_pred, average='weighted', zero_division=0)
+
+                    result_text = f"[{counter:6d}/{total_combinations}] PCA={pca_ratio:.2f} | lr={lr:.2f} | depth={depth:2d} | F1: {val_f1:.4f} | Acc: {val_accuracy:.4f}"
+                    print(result_text)
+
+                    if val_f1 > best_val_f1:
+                        best_val_f1 = val_f1
+                        best_params = {
+                            'pca_ratio': pca_ratio,
+                            'learning_rate': lr,
+                            'max_depth': depth
+                        }
+                        best_gb_model = gb_clf
+                        best_X_test = X_test_norm
+
+        best_text = f"""
+PCA ratio:       {best_params['pca_ratio']:.2f}
+Learning rate:   {best_params['learning_rate']}
+Max depth:       {best_params['max_depth']}
+Best val F1:     {best_val_f1:.4f}
+"""
+        print(best_text)
+
+        y_test_pred = best_gb_model.predict(best_X_test)
+        test_accuracy = accuracy_score(y_test, y_test_pred)
+        test_precision = precision_score(y_test, y_test_pred, average='weighted', zero_division=0)
+        test_recall = recall_score(y_test, y_test_pred, average='weighted', zero_division=0)
+        test_f1 = f1_score(y_test, y_test_pred, average='weighted', zero_division=0)
+
+        final_text = f"""
+{"-" * 140}
+Final Test Results
+{"-" * 140}
+PCA ratio:           {best_params['pca_ratio']:.2f}
+Learning rate:       {best_params['learning_rate']:.2f}
+Max depth:           {best_params['max_depth']}
+Test accuracy:       {test_accuracy:.4f}
+Test precision:      {test_precision:.4f}
+Test recall:         {test_recall:.4f}
+Test F1:             {test_f1:.4f}
+{"-" * 140}
+"""
+        print(final_text)
 
