@@ -1,581 +1,502 @@
 import os
-import cv2
 import numpy as np
 from pathlib import Path
-from preprocess import features, labels
-
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.decomposition import PCA
-
-from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, f1_score, classification_report
+from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 
-from sklearn.preprocessing import normalize, LabelEncoder
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+# ============================================
+# HYPERPARAMETERS (USER CAN MODIFY)
+# ============================================
+
+# Model architecture
+HIDDEN_LAYERS = [128,64]  # MLP hidden layers
+ACTIVATION = "relu"
+DROPOUT_RATE = 0.5
+
+# Training parameters
+TEST_SIZE = 0.2
+VAL_SIZE = 0.25
+
+# Hyperparameter search candidates
+SEARCH_CONFIGS = [
+    {"name": "baseline", "hidden_layers": [128, 64], "dropout_rate": 0.3, "batch_size": 64, "epochs": 25, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 8},
+    {"name": "wider", "hidden_layers": [256, 128, 64], "dropout_rate": 0.4, "batch_size": 32, "epochs": 20, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 6},
+    {"name": "lighter", "hidden_layers": [64, 32], "dropout_rate": 0.2, "batch_size": 128, "epochs": 30, "learning_rate": 2e-3, "weight_decay": 1e-4, "early_stopping_patience": 8},
+    {"name": "regularized", "hidden_layers": [128, 64], "dropout_rate": 0.5, "batch_size": 64, "epochs": 20, "learning_rate": 5e-4, "weight_decay": 5e-4, "early_stopping_patience": 6},    {"name": "baseline_long", "hidden_layers": [128, 64], "dropout_rate": 0.3, "batch_size": 64, "epochs": 80, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "relu"},
+    {"name": "wider_long", "hidden_layers": [256, 128, 64], "dropout_rate": 0.35, "batch_size": 32, "epochs": 100, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "relu"},
+    {"name": "deeper_long", "hidden_layers": [512, 256, 128, 64], "dropout_rate": 0.3, "batch_size": 32, "epochs": 120, "learning_rate": 3e-4, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "gelu"},
+    {"name": "very_wide_long", "hidden_layers": [1024, 512, 256, 128], "dropout_rate": 0.4, "batch_size": 16, "epochs": 100, "learning_rate": 2e-4, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "gelu"},
+    {"name": "bottleneck_long", "hidden_layers": [512, 256, 128], "dropout_rate": 0.25, "batch_size": 64, "epochs": 120, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "leaky_relu"},
+    {"name": "regularized_long", "hidden_layers": [256, 128, 64], "dropout_rate": 0.5, "batch_size": 64, "epochs": 100, "learning_rate": 5e-4, "weight_decay": 5e-4, "early_stopping_patience": 12, "activation": "relu"},
+]
+
+# Global seed for reproducibility
+SEED = 42
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(SEED)
+
+# Device
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {DEVICE}")
+
+# ============================================
+# OUTPUT DIRECTORY
+# ============================================
+
 OUTPUT_DIR = Path("outputs")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
+print("=" * 60)
+print("MLP Training - Raw Images (48x48x3)")
+print("=" * 60)
+print(f"\nHYPERPARAMETERS:")
+print(f"  Hidden layers: {HIDDEN_LAYERS}")
+print(f"  Activation: {ACTIVATION}")
+print(f"  Dropout: {DROPOUT_RATE}")
+print("Hyperparameter search candidates:")
+for cfg in SEARCH_CONFIGS:
+    print(f"  - {cfg['name']}: hidden={cfg['hidden_layers']}, dropout={cfg['dropout_rate']}, batch={cfg['batch_size']}, epochs={cfg['epochs']}, lr={cfg['learning_rate']}, wd={cfg['weight_decay']}")
 
-def save_confusion_matrix_png(y_true, y_pred, class_names, filename):
-    cm = confusion_matrix(y_true, y_pred, labels=np.arange(len(class_names)))
-    fig, ax = plt.subplots(figsize=(8, 6))
-    im = ax.imshow(cm, interpolation="nearest", cmap="viridis")
+# ============================================
+# 1. LOAD DATA
+# ============================================
 
-    ax.set_xticks([])
-    ax.set_yticks([])
-    for spine in ax.spines.values():
-        spine.set_visible(False)
+print("\n" + "=" * 60)
+print("1. LOAD DATA")
+print("=" * 60)
 
-    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    fig.tight_layout()
-    output_path = OUTPUT_DIR / filename
-    fig.savefig(output_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved confusion matrix: {output_path}")
+# Load images.npy and labels.txt
+images = np.load("images.npy")  # Shape: (N, 48, 48, 3)
+with open("labels.txt", "r") as f:
+    labels = [line.strip() for line in f.readlines()]
 
+print(f"Images loaded: {images.shape}")
+print(f"Labels loaded: {len(labels)} samples")
+print(f"First 5 labels: {labels[:5]}")
+print(f"Unique labels: {len(np.unique(labels))}")
 
-# normalize the features
-features = normalize(features)
+# ============================================
+# 2. DATA PREPROCESSING
+# ============================================
 
-print(f"Loaded features: {features.shape}")
-print(f"Loaded labels: {len(labels)}")
+print("\n" + "=" * 60)
+print("2. DATA PREPROCESSING")
+print("=" * 60)
 
-
-
-##split dataset into train and test
+# Encode labels
 label_encoder = LabelEncoder()
 encoded_labels = label_encoder.fit_transform(labels)
+num_classes = len(np.unique(encoded_labels))
 
+print(f"Labels encoded: {num_classes} classes")
+
+# Flatten images (48*48*3 = 6912 features)
+images_flat = images.reshape(images.shape[0], -1)
+print(f"Images flattened: {images_flat.shape}")
+
+# Normalize data: mean=0, std=1 (standard scaling)
+mean = images_flat.mean()
+std = images_flat.std()
+images_flat = (images_flat - mean) / (std + 1e-8)
+print(f"Data normalized: mean={mean:.4f}, std={std:.4f}")
+print(f"After norm - min={images_flat.min():.4f}, max={images_flat.max():.4f}")
+
+# ============================================
+# 3. TRAIN-VAL-TEST SPLIT
+# ============================================
+
+print("\n" + "=" * 60)
+print("3. TRAIN-VAL-TEST SPLIT")
+print("=" * 60)
+
+# Train-Test split
 X_train_val, X_test, y_train_val, y_test = train_test_split(
-    features,
+    images_flat,
     encoded_labels,
-    test_size=0.2,
+    test_size=TEST_SIZE,
     stratify=encoded_labels,
     random_state=42,
     shuffle=True,
 )
 
-# split train+val into train (75% of 80% = 60%) and validation (25% of 80% = 20%)
+# Train-Val split
 X_train, X_val, y_train, y_val = train_test_split(
     X_train_val,
     y_train_val,
-    test_size=0.25,
+    test_size=VAL_SIZE,
     random_state=42,
     shuffle=True,
 )
 
-print(f"\nData split:")
-print(f"  Train:      {X_train.shape[0]} samples ({100*X_train.shape[0]/features.shape[0]:.1f}%)")
-print(f"  Validation: {X_val.shape[0]} samples ({100*X_val.shape[0]/features.shape[0]:.1f}%)")
-print(f"  Test:       {X_test.shape[0]} samples ({100*X_test.shape[0]/features.shape[0]:.1f}%)")
-
-# Save original splits for repeated experiments
-X_train_orig = X_train.copy()
-X_val_orig = X_val.copy()
-X_test_orig = X_test.copy()
-
-
-KNN_train = True
-
-if KNN_train == True:
-
-    k_values = [1]
-    pca_variances = [0.97]
-
-    best_val_f1 = -1.0
-    best_k = None
-    best_pca_ratio = None
-
-    for k in k_values:
-        for pca_ratio in pca_variances:
-            pca = PCA(n_components=pca_ratio)
-            X_train = pca.fit_transform(X_train_orig)  # Fit PCA on training data
-            X_val = pca.transform(X_val_orig)          # Transform validation data
-
-            knn_clf = KNeighborsClassifier(n_neighbors=k, weights='distance', metric='minkowski')
-            knn_clf.fit(X_train, y_train)
-
-            y_val_pred = knn_clf.predict(X_val)
-            val_accuracy = accuracy_score(y_val, y_val_pred)
-            val_precision = precision_score(y_val, y_val_pred, average='weighted', zero_division=0)
-            val_recall = recall_score(y_val, y_val_pred, average='weighted', zero_division=0)
-            val_f1 = f1_score(y_val, y_val_pred, average='weighted', zero_division=0)
-
-            print(f"\n=== k={k}, PCA variance={pca_ratio:.2f} ===")
-            print(f"    Validation accuracy:  {val_accuracy:.4f}")
-            print(f"    Validation precision: {val_precision:.4f}")
-            print(f"    Validation recall:    {val_recall:.4f}")
-            print(f"    Validation F1:        {val_f1:.4f}")
-            print(f"    k value:   {k}")
-            print(f"    PCA ratio: {X_val.shape}")
-
-            if val_f1 > best_val_f1:
-                best_val_f1 = val_f1
-                best_k = k
-                best_pca_ratio = pca_ratio
-
-
-
-    print(f"\n=== Best hyperparameters from validation ===")
-    print(f"    Best k:         {best_k}")
-    print(f"    Best PCA ratio: {best_pca_ratio}")
-    print(f"    Best val F1:    {best_val_f1:.4f}")
-
-    # Final test run using the best hyperparameters once
-    pca = PCA(n_components=best_pca_ratio)
-    X_train = pca.fit_transform(X_train_orig)  # Fit PCA on training data
-    X_test = pca.transform(X_test_orig)        # Transform test data
-
-    knn_clf = KNeighborsClassifier(n_neighbors=best_k, weights='distance', metric='minkowski')
-    knn_clf.fit(X_train, y_train)
-    final_y_pred = knn_clf.predict(X_test)
-
-    final_accuracy = accuracy_score(y_test, final_y_pred)
-    final_precision = precision_score(y_test, final_y_pred, average='weighted', zero_division=0)
-    final_recall = recall_score(y_test, final_y_pred, average='weighted', zero_division=0)
-    final_f1 = f1_score(y_test, final_y_pred, average='weighted', zero_division=0)
-
-    print(f"\n=== Final test result KNN model (best k/pca) ===")
-    print(f"    k:               {best_k}")
-    print(f"    PCA ratio:       {best_pca_ratio}")
-    print(f"    Test accuracy:   {final_accuracy:.4f}")
-    print(f"    Test precision:  {final_precision:.4f}")
-    print(f"    Test recall:     {final_recall:.4f}")
-    print(f"    Test F1:         {final_f1:.4f}")
-
-    save_confusion_matrix_png(
-        y_test,
-        final_y_pred,
-        label_encoder.classes_,
-        "knn_confusion_matrix.png",
-    )
-
-
-
-### decison tree model training
-
-treeTrain = True
-
-if treeTrain == True:
-    from sklearn.tree import DecisionTreeClassifier, plot_tree
-
-    # Try different hyperparameters
-    criterions = ['entropy']
-    max_depths = [500]
-    min_samples_leafs = [1]
-    pca_components = [0.90]
-    best_val_f1 = -1.0
-    best_params = None
-    best_tree_model = None
-
-    print("\n=== Decision Tree Hyperparameter Tuning ===")
-    total_combinations = len(criterions) * len(max_depths) * len(min_samples_leafs) * len(pca_components)
-    print("Tuning criterion, max_depth, min_samples_leaf, and PCA components")
-    print(f"Total combinations: {total_combinations}")
-    print(f"PCA values: {pca_components}")
-    print(f"Max depths: {max_depths}")
-    print(f"Min samples leaf: {min_samples_leafs}")
-    print()
-
-    counter = 0
-    for pca_ratio in pca_components:
-        pca = PCA(n_components=pca_ratio)
-        X_train = pca.fit_transform(X_train_orig)  # Fit PCA on training data
-        X_val = pca.transform(X_val_orig)          # Transform validation data
-        X_test = pca.transform(X_test_orig)        # Transform test data
-
-
-        for criterion in criterions:
-            for depth in max_depths:
-                for min_leaf in min_samples_leafs:
-                    counter += 1
-                    tree_clf = DecisionTreeClassifier(
-                        criterion=criterion,
-                        max_depth=depth,
-                        min_samples_leaf=min_leaf,
-                        random_state=42,
-                    )
-                    tree_clf.fit(X_train, y_train)
-
-                    y_val_pred = tree_clf.predict(X_val)
-                    val_accuracy = accuracy_score(y_val, y_val_pred)
-                    val_precision = precision_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                    val_recall = recall_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                    val_f1 = f1_score(y_val, y_val_pred, average='weighted', zero_division=0)
-
-                    result_text = f"[{counter:5d}/{total_combinations}] PCA={pca_ratio:.2f} | criterion={criterion:10s} | depth={depth:3d} | min_leaf={min_leaf} | F1: {val_f1:.4f} | Acc: {val_accuracy:.4f}"
-                    print(result_text)
-
-                    if val_f1 > best_val_f1:
-                        best_val_f1 = val_f1
-                        best_params = {
-                            'pca_ratio': pca_ratio,
-                            'criterion': criterion,
-                            'max_depth': depth,
-                            'min_samples_leaf': min_leaf
-                        }
-                        best_tree_model = tree_clf
-                        best_X_test = X_test
-
-    best_text = f"""
-PCA ratio:          {best_params['pca_ratio']:.2f}
-Criterion:          {best_params['criterion']}
-Max depth:          {best_params['max_depth']}
-Min samples leaf:   {best_params['min_samples_leaf']}
-Best val F1:        {best_val_f1:.4f}
-"""
-    print(best_text)
-
-    # Final test evaluation with best model
-    y_test_pred = best_tree_model.predict(best_X_test)
-    test_accuracy = accuracy_score(y_test, y_test_pred)
-    test_precision = precision_score(y_test, y_test_pred, average='weighted', zero_division=0)
-    test_recall = recall_score(y_test, y_test_pred, average='weighted', zero_division=0)
-    test_f1 = f1_score(y_test, y_test_pred, average='weighted', zero_division=0)
-
-    final_text = f"""
-{"-" * 120}
-Final Test Results
-{"-" * 120}
-PCA ratio:          {best_params['pca_ratio']:.2f}
-Criterion:          {best_params['criterion']}
-Max depth:          {best_params['max_depth']}
-Min samples leaf:   {best_params['min_samples_leaf']}
-Test accuracy:      {test_accuracy:.4f}
-Test precision:     {test_precision:.4f}
-Test recall:        {test_recall:.4f}
-Test F1:            {test_f1:.4f}
-{"-" * 120}
-"""
-    print(final_text)
-
-    save_confusion_matrix_png(
-        y_test,
-        y_test_pred,
-        label_encoder.classes_,
-        "decision_tree_confusion_matrix.png",
-    )
-
-
-
-randomForestTrain = True
-
-if randomForestTrain == True:
-
-    from sklearn.ensemble import RandomForestClassifier
-
-    # Try different hyperparameters
-    max_features = ['sqrt']
-    n_estimators = [700]
-    max_depths = [100]
-    pca_components = [0.90]
-    best_val_f1 = -1.0
-    best_params = None
-    best_rf_model = None
-
-    print("\n=== Random Forest Hyperparameter Tuning ===")
-    total_combinations = len(max_features) * len(n_estimators) * len(max_depths) * len(pca_components)
-    print("Tuning max_features, n_estimators, max_depth, and PCA components")
-    print(f"Total combinations: {total_combinations}")
-    print(f"PCA values: {pca_components}")
-    print(f"Max depths: {max_depths}")
-    print(f"N estimators: {n_estimators}")
-    print(f"Max features: {max_features}")
-    print()
-
-    counter = 0
-    for pca_ratio in pca_components:
-        pca = PCA(n_components=pca_ratio)
-        X_train = pca.fit_transform(X_train_orig)  # Fit PCA on training data
-        X_val = pca.transform(X_val_orig)          # Transform validation data
-        X_test = pca.transform(X_test_orig)        # Transform test data
-
-        # Normalize after PCA
-        X_train_norm = normalize(X_train)
-        X_val_norm = normalize(X_val)
-        X_test_norm = normalize(X_test)
-
-        for max_feat in max_features:
-            for n_est in n_estimators:
-                for depth in max_depths:
-                    counter += 1
-                    rf_clf = RandomForestClassifier(
-                        max_features=max_feat,
-                        n_estimators=n_est,
-                        max_depth=depth,
-                        random_state=42,
-                        n_jobs=-1
-                    )
-                    rf_clf.fit(X_train_norm, y_train)
-                    
-                    y_val_pred = rf_clf.predict(X_val_norm)
-                    val_accuracy = accuracy_score(y_val, y_val_pred)
-                    val_precision = precision_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                    val_recall = recall_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                    val_f1 = f1_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                    
-                    result_text = f"[{counter:5d}/{total_combinations}] PCA={pca_ratio:.2f} | max_feat={str(max_feat):6s} | n_est={n_est:3d} | depth={depth:3d} | F1: {val_f1:.4f} | Acc: {val_accuracy:.4f}"
-                    print(result_text)
-                    
-                    if val_f1 > best_val_f1:
-                        best_val_f1 = val_f1
-                        best_params = {
-                            'pca_ratio': pca_ratio,
-                            'max_features': max_feat,
-                            'n_estimators': n_est,
-                            'max_depth': depth
-                        }
-                        best_rf_model = rf_clf
-                        best_X_test = X_test_norm
-
-    best_text = f"""
-PCA ratio:       {best_params['pca_ratio']:.2f}
-Max features:    {best_params['max_features']}
-N estimators:    {best_params['n_estimators']}
-Max depth:       {best_params['max_depth']}
-Best val F1:     {best_val_f1:.4f}
-"""
-    print(best_text)
-
-    # Final test evaluation with best model
-    y_test_pred = best_rf_model.predict(best_X_test)
-    test_accuracy = accuracy_score(y_test, y_test_pred)
-    test_precision = precision_score(y_test, y_test_pred, average='weighted', zero_division=0)
-    test_recall = recall_score(y_test, y_test_pred, average='weighted', zero_division=0)
-    test_f1 = f1_score(y_test, y_test_pred, average='weighted', zero_division=0)
-
-    final_text = f"""
-{"-" * 120}
-Final Test Results
-{"-" * 120}
-PCA ratio:       {best_params['pca_ratio']:.2f}
-Max features:    {best_params['max_features']}
-N estimators:    {best_params['n_estimators']}
-Max depth:       {best_params['max_depth']}
-Test accuracy:   {test_accuracy:.4f}
-Test precision:  {test_precision:.4f}
-Test recall:     {test_recall:.4f}
-Test F1:         {test_f1:.4f}
-{"-" * 120}
-"""
-    print(final_text)
-
-    save_confusion_matrix_png(
-        y_test,
-        y_test_pred,
-        label_encoder.classes_,
-        "random_forest_confusion_matrix.png",
-    )
-
-
-gradientBoostingTrain = True
-
-if gradientBoostingTrain == True:
-    try:
-        import xgboost as xgb
-        from xgboost import XGBClassifier
-        xgb_available = True
-    except Exception as e:
-        xgb_available = False
-        print(f"XGBoost unavailable, falling back to sklearn: {e}")
-
-    if xgb_available:
-        try:
-            import torch
-            gpu_available = torch.cuda.is_available()
-        except Exception:
-            gpu_available = False
-
-        tree_method = 'hist'
-        device = 'cuda' if gpu_available else 'cpu'
-
-        learning_rates = [0.1]
-        max_depths = [3]
-        pca_components = [0.90]
-        best_val_f1 = -1.0
-        best_params = None
-        best_gb_model = None
-
-        print("\n=== Gradient Boosting Hyperparameter Tuning (XGBoost) ===")
-        total_combinations = len(learning_rates) * len(max_depths) * len(pca_components)
-        print("Tuning learning_rate, max_depth, and PCA components")
-        print(f"Total combinations: {total_combinations}")
-        print(f"PCA values: {pca_components}")
-        print(f"Max depths: {max_depths}")
-        print(f"Learning rates: {learning_rates}")
-        print(f"Training backend: {device} ({tree_method})")
-        print()
-
-        counter = 0
-        for pca_ratio in pca_components:
-            pca = PCA(n_components=pca_ratio)
-            X_train = pca.fit_transform(X_train_orig)
-            X_val = pca.transform(X_val_orig)
-            X_test = pca.transform(X_test_orig)
-
-            X_train_norm = normalize(X_train)
-            X_val_norm = normalize(X_val)
-            X_test_norm = normalize(X_test)
-
-            for lr in learning_rates:
-                for depth in max_depths:
-                    counter += 1
-                    gb_clf = XGBClassifier(
-                        learning_rate=lr,
-                        max_depth=depth,
-                        n_estimators=200,
-                        objective='multi:softprob',
-                        eval_metric='mlogloss',
-                        random_state=42,
-                        tree_method=tree_method,
-                        device=device,
-                        n_jobs=4,
-                    )
-                    gb_clf.fit(X_train_norm, y_train)
-
-                    y_val_pred = gb_clf.predict(X_val_norm)
-                    val_accuracy = accuracy_score(y_val, y_val_pred)
-                    val_precision = precision_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                    val_recall = recall_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                    val_f1 = f1_score(y_val, y_val_pred, average='weighted', zero_division=0)
-
-                    result_text = f"[{counter:6d}/{total_combinations}] PCA={pca_ratio:.2f} | lr={lr:.2f} | depth={depth:2d} | F1: {val_f1:.4f} | Acc: {val_accuracy:.4f}"
-                    print(result_text)
-
-                    if val_f1 > best_val_f1:
-                        best_val_f1 = val_f1
-                        best_params = {
-                            'pca_ratio': pca_ratio,
-                            'learning_rate': lr,
-                            'max_depth': depth
-                        }
-                        best_gb_model = gb_clf
-                        best_X_test = X_test_norm
-
-        best_text = f"""
-PCA ratio:       {best_params['pca_ratio']:.2f}
-Learning rate:   {best_params['learning_rate']}
-Max depth:       {best_params['max_depth']}
-Best val F1:     {best_val_f1:.4f}
-"""
-        print(best_text)
-
-        y_test_pred = best_gb_model.predict(best_X_test)
-        test_accuracy = accuracy_score(y_test, y_test_pred)
-        test_precision = precision_score(y_test, y_test_pred, average='weighted', zero_division=0)
-        test_recall = recall_score(y_test, y_test_pred, average='weighted', zero_division=0)
-        test_f1 = f1_score(y_test, y_test_pred, average='weighted', zero_division=0)
-
-        final_text = f"""
-{"-" * 140}
-Final Test Results
-{"-" * 140}
-PCA ratio:           {best_params['pca_ratio']:.2f}
-Learning rate:       {best_params['learning_rate']:.2f}
-Max depth:           {best_params['max_depth']}
-Test accuracy:       {test_accuracy:.4f}
-Test precision:      {test_precision:.4f}
-Test recall:         {test_recall:.4f}
-Test F1:             {test_f1:.4f}
-{"-" * 140}
-"""
-        print(final_text)
-
-        save_confusion_matrix_png(
-            y_test,
-            y_test_pred,
-            label_encoder.classes_,
-            "gradient_boosting_confusion_matrix.png",
-        )
-    else:
-        from sklearn.ensemble import GradientBoostingClassifier
-
-        learning_rates = [0.01, 0.05, 0.2]
-        max_depths = [2, 6]
-        pca_components = [0.50, 0.90, 0.99]
-        best_val_f1 = -1.0
-        best_params = None
-        best_gb_model = None
-
-        print("\n=== Gradient Boosting Hyperparameter Tuning (sklearn fallback) ===")
-        total_combinations = len(learning_rates) * len(max_depths) * len(pca_components)
-        print("Tuning learning_rate, max_depth, and PCA components")
-        print(f"Total combinations: {total_combinations}")
-        print(f"PCA values: {pca_components}")
-        print(f"Max depths: {max_depths}")
-        print(f"Learning rates: {learning_rates}")
-        print()
-
-        counter = 0
-        for pca_ratio in pca_components:
-            pca = PCA(n_components=pca_ratio)
-            X_train = pca.fit_transform(X_train_orig)
-            X_val = pca.transform(X_val_orig)
-            X_test = pca.transform(X_test_orig)
-
-            X_train_norm = normalize(X_train)
-            X_val_norm = normalize(X_val)
-            X_test_norm = normalize(X_test)
-
-            for lr in learning_rates:
-                for depth in max_depths:
-                    counter += 1
-                    gb_clf = GradientBoostingClassifier(
-                        learning_rate=lr,
-                        n_estimators=100,
-                        max_depth=depth,
-                        random_state=42
-                    )
-                    gb_clf.fit(X_train_norm, y_train)
-
-                    y_val_pred = gb_clf.predict(X_val_norm)
-                    val_accuracy = accuracy_score(y_val, y_val_pred)
-                    val_precision = precision_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                    val_recall = recall_score(y_val, y_val_pred, average='weighted', zero_division=0)
-                    val_f1 = f1_score(y_val, y_val_pred, average='weighted', zero_division=0)
-
-                    result_text = f"[{counter:6d}/{total_combinations}] PCA={pca_ratio:.2f} | lr={lr:.2f} | depth={depth:2d} | F1: {val_f1:.4f} | Acc: {val_accuracy:.4f}"
-                    print(result_text)
-
-                    if val_f1 > best_val_f1:
-                        best_val_f1 = val_f1
-                        best_params = {
-                            'pca_ratio': pca_ratio,
-                            'learning_rate': lr,
-                            'max_depth': depth
-                        }
-                        best_gb_model = gb_clf
-                        best_X_test = X_test_norm
-
-        best_text = f"""
-PCA ratio:       {best_params['pca_ratio']:.2f}
-Learning rate:   {best_params['learning_rate']}
-Max depth:       {best_params['max_depth']}
-Best val F1:     {best_val_f1:.4f}
-"""
-        print(best_text)
-
-        y_test_pred = best_gb_model.predict(best_X_test)
-        test_accuracy = accuracy_score(y_test, y_test_pred)
-        test_precision = precision_score(y_test, y_test_pred, average='weighted', zero_division=0)
-        test_recall = recall_score(y_test, y_test_pred, average='weighted', zero_division=0)
-        test_f1 = f1_score(y_test, y_test_pred, average='weighted', zero_division=0)
-
-        final_text = f"""
-{"-" * 140}
-Final Test Results
-{"-" * 140}
-PCA ratio:           {best_params['pca_ratio']:.2f}
-Learning rate:       {best_params['learning_rate']:.2f}
-Max depth:           {best_params['max_depth']}
-Test accuracy:       {test_accuracy:.4f}
-Test precision:      {test_precision:.4f}
-Test recall:         {test_recall:.4f}
-Test F1:             {test_f1:.4f}
-{"-" * 140}
-"""
-        print(final_text)
-
+print(f"Train: {X_train.shape[0]} ({100*X_train.shape[0]/len(images_flat):.1f}%)")
+print(f"Val:   {X_val.shape[0]} ({100*X_val.shape[0]/len(images_flat):.1f}%)")
+print(f"Test:  {X_test.shape[0]} ({100*X_test.shape[0]/len(images_flat):.1f}%)")
+
+# Convert to PyTorch tensors
+X_train_tensor = torch.FloatTensor(X_train)
+y_train_tensor = torch.LongTensor(y_train)
+
+X_val_tensor = torch.FloatTensor(X_val)
+y_val_tensor = torch.LongTensor(y_val)
+
+X_test_tensor = torch.FloatTensor(X_test)
+y_test_tensor = torch.LongTensor(y_test)
+
+print(f"DataLoaders created")
+
+# ============================================
+# 4. BUILD MLP MODEL
+# ============================================
+
+print("\n" + "=" * 60)
+print("4. BUILD MLP MODEL")
+print("=" * 60)
+
+class MLPModel(nn.Module):
+    def __init__(self, input_dim, hidden_layers, num_classes, dropout_rate=0.3):
+        super(MLPModel, self).__init__()
+        layers = []
+        
+        # Input -> First hidden
+        layers.append(nn.Linear(input_dim, hidden_layers[0]))
+        layers.append(nn.BatchNorm1d(hidden_layers[0]))
+        layers.append(nn.ReLU())
+        layers.append(nn.Dropout(dropout_rate))
+        
+        # Hidden -> Hidden
+        for i in range(len(hidden_layers) - 1):
+            layers.append(nn.Linear(hidden_layers[i], hidden_layers[i+1]))
+            layers.append(nn.BatchNorm1d(hidden_layers[i+1]))
+            layers.append(nn.ReLU())
+            layers.append(nn.Dropout(dropout_rate))
+        
+        # Last hidden -> Output
+        layers.append(nn.Linear(hidden_layers[-1], num_classes))
+        
+        self.network = nn.Sequential(*layers)
+    
+    def forward(self, x):
+        return self.network(x)
+
+input_dim = X_train_tensor.shape[1]  # 6912
+model = MLPModel(input_dim, HIDDEN_LAYERS, num_classes, DROPOUT_RATE)
+model = model.to(DEVICE)
+
+print("\nModel architecture:")
+print(model)
+
+# ============================================
+# 5. TRAIN WITH HYPERPARAMETER SEARCH
+# ============================================
+
+print("\n" + "=" * 60)
+print("5. HYPERPARAMETER SEARCH")
+print("=" * 60)
+
+loss_fn = nn.CrossEntropyLoss()
+
+# Build data loaders once for the fixed splits
+train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+val_dataset = TensorDataset(X_val_tensor, y_val_tensor)
+test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
+
+best_result = None
+
+for config in SEARCH_CONFIGS:
+    print(f"\nRunning trial: {config['name']}")
+
+    train_loader = DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=config["batch_size"], shuffle=False)
+
+    model = MLPModel(input_dim, config["hidden_layers"], num_classes, config["dropout_rate"])
+    model = model.to(DEVICE)
+
+    optimizer = optim.Adam(model.parameters(), lr=config["learning_rate"], weight_decay=config["weight_decay"])
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
+
+    train_losses = []
+    val_losses = []
+    train_accs = []
+    val_accs = []
+
+    best_val_loss = float('inf')
+    best_val_acc = 0.0
+    patience_counter = 0
+    best_state = None
+
+    for epoch in range(config["epochs"]):
+        model.train()
+        train_loss = 0.0
+        train_correct = 0
+        train_total = 0
+
+        for X_batch, y_batch in train_loader:
+            X_batch = X_batch.to(DEVICE)
+            y_batch = y_batch.to(DEVICE)
+
+            outputs = model(X_batch)
+            loss = loss_fn(outputs, y_batch)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+            _, predicted = torch.max(outputs.data, 1)
+            train_total += y_batch.size(0)
+            train_correct += (predicted == y_batch).sum().item()
+
+        train_loss /= len(train_loader)
+        train_acc = train_correct / train_total
+
+        model.eval()
+        val_loss = 0.0
+        val_correct = 0
+        val_total = 0
+
+        with torch.no_grad():
+            for X_batch, y_batch in val_loader:
+                X_batch = X_batch.to(DEVICE)
+                y_batch = y_batch.to(DEVICE)
+
+                outputs = model(X_batch)
+                loss = loss_fn(outputs, y_batch)
+
+                val_loss += loss.item()
+                _, predicted = torch.max(outputs.data, 1)
+                val_total += y_batch.size(0)
+                val_correct += (predicted == y_batch).sum().item()
+
+        val_loss /= len(val_loader)
+        val_acc = val_correct / val_total
+
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+        train_accs.append(train_acc)
+        val_accs.append(val_acc)
+
+        acc_gap = train_acc - val_acc
+        if acc_gap > 0.15:
+            print(f"  Epoch [{epoch + 1}/{config['epochs']}] - possible overfitting (gap={acc_gap:.3f})")
+        elif acc_gap < 0.03 and val_acc < 0.8:
+            print(f"  Epoch [{epoch + 1}/{config['epochs']}] - possible underfitting")
+
+        scheduler.step(val_loss)
+
+        if val_loss < best_val_loss - 1e-6 or (abs(val_loss - best_val_loss) < 1e-6 and val_acc > best_val_acc):
+            best_val_loss = val_loss
+            best_val_acc = val_acc
+            patience_counter = 0
+            best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+        else:
+            patience_counter += 1
+            if patience_counter >= config["early_stopping_patience"]:
+                print(f"  Early stopping at epoch {epoch + 1}")
+                break
+
+    model.load_state_dict(best_state)
+    model.eval()
+
+    test_correct = 0
+    test_total = 0
+    with torch.no_grad():
+        for X_batch, y_batch in test_loader:
+            X_batch = X_batch.to(DEVICE)
+            y_batch = y_batch.to(DEVICE)
+            outputs = model(X_batch)
+            _, predicted = torch.max(outputs.data, 1)
+            test_total += y_batch.size(0)
+            test_correct += (predicted == y_batch).sum().item()
+
+    test_acc = test_correct / test_total
+
+    train_correct_final = 0
+    train_total_final = 0
+    with torch.no_grad():
+        for X_batch, y_batch in train_loader:
+            X_batch = X_batch.to(DEVICE)
+            y_batch = y_batch.to(DEVICE)
+            outputs = model(X_batch)
+            _, predicted = torch.max(outputs.data, 1)
+            train_total_final += y_batch.size(0)
+            train_correct_final += (predicted == y_batch).sum().item()
+
+    train_acc_final = train_correct_final / train_total_final
+
+    print(f"  Result -> val_acc={val_acc:.4f}, test_acc={test_acc:.4f}, train_acc={train_acc_final:.4f}")
+
+    trial_result = {
+        "name": config["name"],
+        "config": config,
+        "state_dict": best_state,
+        "train_losses": train_losses,
+        "val_losses": val_losses,
+        "train_accs": train_accs,
+        "val_accs": val_accs,
+        "val_acc": val_acc,
+        "test_acc": test_acc,
+        "train_acc": train_acc_final,
+    }
+
+    if best_result is None or trial_result["val_acc"] > best_result["val_acc"] + 1e-6:
+        best_result = trial_result
+
+print(f"\nBest trial: {best_result['name']}")
+print(f"Best validation accuracy: {best_result['val_acc']:.4f}")
+
+# ============================================
+# 6. LOAD BEST MODEL AND TEST
+# ============================================
+
+print("\n" + "=" * 60)
+print("6. TEST RESULTS")
+print("=" * 60)
+
+best_model = MLPModel(input_dim, best_result["config"]["hidden_layers"], num_classes, best_result["config"]["dropout_rate"])
+best_model = best_model.to(DEVICE)
+best_model.load_state_dict(best_result["state_dict"])
+best_model.eval()
+
+# Re-evaluate best model on train/val/test
+val_loader = DataLoader(val_dataset, batch_size=best_result["config"]["batch_size"], shuffle=False)
+test_loader = DataLoader(test_dataset, batch_size=best_result["config"]["batch_size"], shuffle=False)
+train_loader = DataLoader(train_dataset, batch_size=best_result["config"]["batch_size"], shuffle=False)
+
+val_correct = 0
+val_total = 0
+with torch.no_grad():
+    for X_batch, y_batch in val_loader:
+        X_batch = X_batch.to(DEVICE)
+        y_batch = y_batch.to(DEVICE)
+        outputs = best_model(X_batch)
+        _, predicted = torch.max(outputs.data, 1)
+        val_total += y_batch.size(0)
+        val_correct += (predicted == y_batch).sum().item()
+val_acc = val_correct / val_total
+
+test_correct = 0
+test_total = 0
+with torch.no_grad():
+    for X_batch, y_batch in test_loader:
+        X_batch = X_batch.to(DEVICE)
+        y_batch = y_batch.to(DEVICE)
+        outputs = best_model(X_batch)
+        _, predicted = torch.max(outputs.data, 1)
+        test_total += y_batch.size(0)
+        test_correct += (predicted == y_batch).sum().item()
+test_acc = test_correct / test_total
+
+train_correct_final = 0
+train_total_final = 0
+with torch.no_grad():
+    for X_batch, y_batch in train_loader:
+        X_batch = X_batch.to(DEVICE)
+        y_batch = y_batch.to(DEVICE)
+        outputs = best_model(X_batch)
+        _, predicted = torch.max(outputs.data, 1)
+        train_total_final += y_batch.size(0)
+        train_correct_final += (predicted == y_batch).sum().item()
+train_acc_final = train_correct_final / train_total_final
+
+print(f"\nBest Validation Accuracy: {val_acc:.4f}")
+print(f"Test Accuracy: {test_acc:.4f}")
+print(f"Train Accuracy: {train_acc_final:.4f}")
+
+# ============================================
+# 7. PLOTS
+# ============================================
+
+print("\n" + "=" * 60)
+print("7. GENERATING PLOTS")
+print("=" * 60)
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+axes[0].plot(best_result["train_accs"], label="Train", linewidth=2)
+axes[0].plot(best_result["val_accs"], label="Validation", linewidth=2)
+axes[0].set_xlabel("Epoch")
+axes[0].set_ylabel("Accuracy")
+axes[0].set_title("Model Accuracy")
+axes[0].legend()
+axes[0].grid(True, alpha=0.3)
+
+axes[1].plot(best_result["train_losses"], label="Train", linewidth=2)
+axes[1].plot(best_result["val_losses"], label="Validation", linewidth=2)
+axes[1].set_xlabel("Epoch")
+axes[1].set_ylabel("Loss")
+axes[1].set_title("Model Loss")
+axes[1].legend()
+axes[1].grid(True, alpha=0.3)
+
+fig.tight_layout()
+fig.savefig(OUTPUT_DIR / "training_history.png", dpi=300, bbox_inches="tight")
+plt.close(fig)
+
+print(f"Plot saved: {OUTPUT_DIR / 'training_history.png'}")
+
+# ============================================
+# 8. SAVE MODEL
+# ============================================
+
+print("\n" + "=" * 60)
+print("8. SAVE MODEL")
+print("=" * 60)
+
+torch.save(best_model.state_dict(), OUTPUT_DIR / "mlp_model.pth")
+print(f"Model saved: {OUTPUT_DIR / 'mlp_model.pth'}")
+
+torch.save(best_model.state_dict(), OUTPUT_DIR / "best_model.pth")
+print(f"Best model saved: {OUTPUT_DIR / 'best_model.pth'}")
+
+import pickle
+with open(OUTPUT_DIR / "label_encoder.pkl", "wb") as f:
+    pickle.dump(label_encoder, f)
+print(f"Label encoder saved: {OUTPUT_DIR / 'label_encoder.pkl'}")
+
+# ============================================
+# 9. SAVE SUMMARY
+# ============================================
+
+with open(OUTPUT_DIR / "training_summary.txt", "w") as f:
+    f.write("=" * 60 + "\n")
+    f.write("MLP Training Summary\n")
+    f.write("=" * 60 + "\n\n")
+
+    f.write("BEST CONFIGURATION:\n")
+    f.write(f"  Name: {best_result['name']}\n")
+    f.write(f"  Hidden layers: {best_result['config']['hidden_layers']}\n")
+    f.write(f"  Dropout: {best_result['config']['dropout_rate']}\n")
+    f.write(f"  Batch size: {best_result['config']['batch_size']}\n")
+    f.write(f"  Epochs: {best_result['config']['epochs']}\n")
+    f.write(f"  Learning rate: {best_result['config']['learning_rate']}\n")
+    f.write(f"  Weight decay: {best_result['config']['weight_decay']}\n\n")
+
+    f.write("DATA:\n")
+    f.write(f"  Train: {X_train.shape[0]}\n")
+    f.write(f"  Val: {X_val.shape[0]}\n")
+    f.write(f"  Test: {X_test.shape[0]}\n")
+    f.write(f"  Classes: {num_classes}\n\n")
+
+    f.write("RESULTS:\n")
+    f.write(f"  Validation Accuracy: {val_acc:.4f}\n")
+    f.write(f"  Train Accuracy: {train_acc_final:.4f}\n")
+    f.write(f"  Test Accuracy: {test_acc:.4f}\n")
+
+print(f"Summary saved: {OUTPUT_DIR / 'training_summary.txt'}")
+
+print("\n" + "=" * 60)
+print("ALL DONE!")
+print("=" * 60)
+
+            
