@@ -27,15 +27,29 @@ VAL_SIZE = 0.25
 
 # Hyperparameter search candidates
 SEARCH_CONFIGS = [
-    {"name": "baseline", "hidden_layers": [128, 64], "dropout_rate": 0.3, "batch_size": 64, "epochs": 25, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 8},
-    {"name": "wider", "hidden_layers": [256, 128, 64], "dropout_rate": 0.4, "batch_size": 32, "epochs": 20, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 6},
-    {"name": "lighter", "hidden_layers": [64, 32], "dropout_rate": 0.2, "batch_size": 128, "epochs": 30, "learning_rate": 2e-3, "weight_decay": 1e-4, "early_stopping_patience": 8},
-    {"name": "regularized", "hidden_layers": [128, 64], "dropout_rate": 0.5, "batch_size": 64, "epochs": 20, "learning_rate": 5e-4, "weight_decay": 5e-4, "early_stopping_patience": 6},    {"name": "baseline_long", "hidden_layers": [128, 64], "dropout_rate": 0.3, "batch_size": 64, "epochs": 80, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "relu"},
-    {"name": "wider_long", "hidden_layers": [256, 128, 64], "dropout_rate": 0.35, "batch_size": 32, "epochs": 100, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "relu"},
-    {"name": "deeper_long", "hidden_layers": [512, 256, 128, 64], "dropout_rate": 0.3, "batch_size": 32, "epochs": 120, "learning_rate": 3e-4, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "gelu"},
-    {"name": "very_wide_long", "hidden_layers": [1024, 512, 256, 128], "dropout_rate": 0.4, "batch_size": 16, "epochs": 100, "learning_rate": 2e-4, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "gelu"},
-    {"name": "bottleneck_long", "hidden_layers": [512, 256, 128], "dropout_rate": 0.25, "batch_size": 64, "epochs": 120, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "leaky_relu"},
-    {"name": "regularized_long", "hidden_layers": [256, 128, 64], "dropout_rate": 0.5, "batch_size": 64, "epochs": 100, "learning_rate": 5e-4, "weight_decay": 5e-4, "early_stopping_patience": 12, "activation": "relu"},
+    ##{"name": "baseline", "hidden_layers": [128, 64], "dropout_rate": 0.3, "batch_size": 64, "epochs": 25, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 8},
+    ##{"name": "wider", "hidden_layers": [256, 128, 64], "dropout_rate": 0.4, "batch_size": 32, "epochs": 20, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 6},
+    ##{"name": "lighter", "hidden_layers": [64, 32], "dropout_rate": 0.2, "batch_size": 128, "epochs": 30, "learning_rate": 2e-3, "weight_decay": 1e-4, "early_stopping_patience": 8},
+    ##{"name": "regularized", "hidden_layers": [128, 64], "dropout_rate": 0.5, "batch_size": 64, "epochs": 20, "learning_rate": 5e-4, "weight_decay": 5e-4, "early_stopping_patience": 3},    
+    
+    
+    ##{"name": "baseline_long", "hidden_layers": [128, 64], "dropout_rate": 0.3, "batch_size": 64, "epochs": 80, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "relu"},
+    ##{"name": "baseline_long_v2", "hidden_layers": [128, 128], "dropout_rate": 0.3, "batch_size": 32, "epochs": 80, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 9, "activation": "leaky_relu"},
+    
+    
+    ##{"name": "wider_long", "hidden_layers": [256, 128, 64], "dropout_rate": 0.35, "batch_size": 32, "epochs": 100, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "relu"},
+    ##{"name": "deeper_long", "hidden_layers": [512, 256, 128, 64], "dropout_rate": 0.3, "batch_size": 32, "epochs": 120, "learning_rate": 3e-4, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "gelu"},
+    ##{"name": "very_wide_long", "hidden_layers": [1024, 512, 256, 128], "dropout_rate": 0.4, "batch_size": 16, "epochs": 100, "learning_rate": 2e-4, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "gelu"},
+    
+    ##{"name": "bottleneck_long", "hidden_layers": [512, 256, 128], "dropout_rate": 0.25, "batch_size": 64, "epochs": 120, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "leaky_relu"},
+    
+    
+    {"name": "deli_1453", "hidden_layers": [2048,1024,512,256, 128], "dropout_rate": 0.25, "batch_size": 64, "epochs": 120, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "leaky_relu"},
+    {"name": "deli_1453_v2", "hidden_layers": [4096,2048,1024,512,256,128], "dropout_rate": 0.25, "batch_size": 64, "epochs": 400, "learning_rate": 0.00001, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "leaky_relu"}
+
+    
+    
+    ##{"name": "regularized_long", "hidden_layers": [256, 128, 64], "dropout_rate": 0.5, "batch_size": 64, "epochs": 100, "learning_rate": 5e-4, "weight_decay": 5e-4, "early_stopping_patience": 12, "activation": "relu"},
 ]
 
 # Global seed for reproducibility
@@ -286,11 +300,15 @@ for config in SEARCH_CONFIGS:
         train_accs.append(train_acc)
         val_accs.append(val_acc)
 
+        print(
+            f"  Epoch [{epoch + 1}/{config['epochs']}] - "
+            f"train_loss={train_loss:.4f}, val_loss={val_loss:.4f}, "
+            f"train_acc={train_acc:.4f}, val_acc={val_acc:.4f}"
+        )
+
         acc_gap = train_acc - val_acc
         if acc_gap > 0.15:
-            print(f"  Epoch [{epoch + 1}/{config['epochs']}] - possible overfitting (gap={acc_gap:.3f})")
-        elif acc_gap < 0.03 and val_acc < 0.8:
-            print(f"  Epoch [{epoch + 1}/{config['epochs']}] - possible underfitting")
+            print(f"    possible overfitting (gap={acc_gap:.3f})")
 
         scheduler.step(val_loss)
 
