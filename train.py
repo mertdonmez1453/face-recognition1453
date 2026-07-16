@@ -27,29 +27,66 @@ VAL_SIZE = 0.25
 
 # Hyperparameter search candidates
 SEARCH_CONFIGS = [
-    ##{"name": "baseline", "hidden_layers": [128, 64], "dropout_rate": 0.3, "batch_size": 64, "epochs": 25, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 8},
-    ##{"name": "wider", "hidden_layers": [256, 128, 64], "dropout_rate": 0.4, "batch_size": 32, "epochs": 20, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 6},
-    ##{"name": "lighter", "hidden_layers": [64, 32], "dropout_rate": 0.2, "batch_size": 128, "epochs": 30, "learning_rate": 2e-3, "weight_decay": 1e-4, "early_stopping_patience": 8},
-    ##{"name": "regularized", "hidden_layers": [128, 64], "dropout_rate": 0.5, "batch_size": 64, "epochs": 20, "learning_rate": 5e-4, "weight_decay": 5e-4, "early_stopping_patience": 3},    
-    
-    
-    ##{"name": "baseline_long", "hidden_layers": [128, 64], "dropout_rate": 0.3, "batch_size": 64, "epochs": 80, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "relu"},
-    ##{"name": "baseline_long_v2", "hidden_layers": [128, 128], "dropout_rate": 0.3, "batch_size": 32, "epochs": 80, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 9, "activation": "leaky_relu"},
-    
-    
-    ##{"name": "wider_long", "hidden_layers": [256, 128, 64], "dropout_rate": 0.35, "batch_size": 32, "epochs": 100, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "relu"},
-    ##{"name": "deeper_long", "hidden_layers": [512, 256, 128, 64], "dropout_rate": 0.3, "batch_size": 32, "epochs": 120, "learning_rate": 3e-4, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "gelu"},
-    ##{"name": "very_wide_long", "hidden_layers": [1024, 512, 256, 128], "dropout_rate": 0.4, "batch_size": 16, "epochs": 100, "learning_rate": 2e-4, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "gelu"},
-    
-    ##{"name": "bottleneck_long", "hidden_layers": [512, 256, 128], "dropout_rate": 0.25, "batch_size": 64, "epochs": 120, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "leaky_relu"},
-    
-    
-    {"name": "deli_1453", "hidden_layers": [2048,1024,512,256, 128], "dropout_rate": 0.25, "batch_size": 64, "epochs": 120, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "leaky_relu"},
-    {"name": "deli_1453_v2", "hidden_layers": [4096,2048,1024,512,256,128], "dropout_rate": 0.25, "batch_size": 64, "epochs": 400, "learning_rate": 0.00001, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "leaky_relu"}
+    {"name": "tiny_32", "hidden_layers": [32], "dropout_rate": 0.1, "batch_size": 128, "epochs": 80, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 10, "activation": "relu"},
+    {"name": "tiny_64", "hidden_layers": [64], "dropout_rate": 0.2, "batch_size": 128, "epochs": 100, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "relu"},
+    {"name": "tiny_64_32", "hidden_layers": [64, 32], "dropout_rate": 0.2, "batch_size": 128, "epochs": 100, "learning_rate": 2e-3, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "relu"},
+    {"name": "tiny_128_32", "hidden_layers": [128, 32], "dropout_rate": 0.25, "batch_size": 128, "epochs": 100, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 12, "activation": "leaky_relu"},
+    {"name": "tiny_deep", "hidden_layers": [128, 64, 32, 16], "dropout_rate": 0.25, "batch_size": 128, "epochs": 120, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "relu"},
 
-    
-    
-    ##{"name": "regularized_long", "hidden_layers": [256, 128, 64], "dropout_rate": 0.5, "batch_size": 64, "epochs": 100, "learning_rate": 5e-4, "weight_decay": 5e-4, "early_stopping_patience": 12, "activation": "relu"},
+    {"name": "baseline_relu", "hidden_layers": [128, 64], "dropout_rate": 0.3, "batch_size": 64, "epochs": 120, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "relu"},
+    {"name": "baseline_leaky", "hidden_layers": [128, 64], "dropout_rate": 0.3, "batch_size": 64, "epochs": 120, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "leaky_relu"},
+    {"name": "baseline_gelu", "hidden_layers": [128, 64], "dropout_rate": 0.3, "batch_size": 64, "epochs": 120, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "gelu"},
+    {"name": "baseline_low_dropout", "hidden_layers": [128, 64], "dropout_rate": 0.1, "batch_size": 64, "epochs": 120, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "relu"},
+    {"name": "baseline_high_dropout", "hidden_layers": [128, 64], "dropout_rate": 0.6, "batch_size": 64, "epochs": 150, "learning_rate": 5e-4, "weight_decay": 5e-4, "early_stopping_patience": 20, "activation": "relu"},
+
+    {"name": "medium_256_128", "hidden_layers": [256, 128], "dropout_rate": 0.3, "batch_size": 64, "epochs": 150, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 18, "activation": "relu"},
+    {"name": "medium_256_128_64", "hidden_layers": [256, 128, 64], "dropout_rate": 0.35, "batch_size": 64, "epochs": 150, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 18, "activation": "leaky_relu"},
+    {"name": "medium_256_256_128", "hidden_layers": [256, 256, 128], "dropout_rate": 0.3, "batch_size": 64, "epochs": 160, "learning_rate": 3e-4, "weight_decay": 1e-4, "early_stopping_patience": 20, "activation": "gelu"},
+    {"name": "medium_384_192_96", "hidden_layers": [384, 192, 96], "dropout_rate": 0.3, "batch_size": 64, "epochs": 160, "learning_rate": 5e-4, "weight_decay": 2e-4, "early_stopping_patience": 20, "activation": "leaky_relu"},
+    {"name": "medium_512_128", "hidden_layers": [512, 128], "dropout_rate": 0.35, "batch_size": 64, "epochs": 180, "learning_rate": 3e-4, "weight_decay": 1e-4, "early_stopping_patience": 20, "activation": "relu"},
+
+    {"name": "bottleneck_512_256_128", "hidden_layers": [512, 256, 128], "dropout_rate": 0.25, "batch_size": 64, "epochs": 150, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 18, "activation": "leaky_relu"},
+    {"name": "bottleneck_512_128_32", "hidden_layers": [512, 128, 32], "dropout_rate": 0.3, "batch_size": 64, "epochs": 160, "learning_rate": 3e-4, "weight_decay": 2e-4, "early_stopping_patience": 20, "activation": "gelu"},
+    {"name": "bottleneck_1024_256_64", "hidden_layers": [1024, 256, 64], "dropout_rate": 0.35, "batch_size": 32, "epochs": 180, "learning_rate": 2e-4, "weight_decay": 2e-4, "early_stopping_patience": 20, "activation": "leaky_relu"},
+    {"name": "hourglass_256_64_256", "hidden_layers": [256, 64, 256], "dropout_rate": 0.3, "batch_size": 64, "epochs": 160, "learning_rate": 3e-4, "weight_decay": 1e-4, "early_stopping_patience": 18, "activation": "gelu"},
+    {"name": "hourglass_512_128_512_128", "hidden_layers": [512, 128, 512, 128], "dropout_rate": 0.35, "batch_size": 32, "epochs": 180, "learning_rate": 2e-4, "weight_decay": 2e-4, "early_stopping_patience": 22, "activation": "leaky_relu"},
+
+    {"name": "wide_512_512", "hidden_layers": [512, 512], "dropout_rate": 0.3, "batch_size": 64, "epochs": 180, "learning_rate": 3e-4, "weight_decay": 1e-4, "early_stopping_patience": 20, "activation": "relu"},
+    {"name": "wide_512_512_256", "hidden_layers": [512, 512, 256], "dropout_rate": 0.35, "batch_size": 32, "epochs": 180, "learning_rate": 3e-4, "weight_decay": 1e-4, "early_stopping_patience": 20, "activation": "leaky_relu"},
+    {"name": "wide_768_384_192", "hidden_layers": [768, 384, 192], "dropout_rate": 0.35, "batch_size": 32, "epochs": 200, "learning_rate": 2e-4, "weight_decay": 2e-4, "early_stopping_patience": 22, "activation": "gelu"},
+    {"name": "wide_1024_512_256", "hidden_layers": [1024, 512, 256], "dropout_rate": 0.4, "batch_size": 32, "epochs": 200, "learning_rate": 2e-4, "weight_decay": 2e-4, "early_stopping_patience": 22, "activation": "leaky_relu"},
+    {"name": "wide_1024_1024_512", "hidden_layers": [1024, 1024, 512], "dropout_rate": 0.4, "batch_size": 32, "epochs": 220, "learning_rate": 1e-4, "weight_decay": 3e-4, "early_stopping_patience": 25, "activation": "gelu"},
+
+    {"name": "deep_256", "hidden_layers": [256, 256, 256, 256], "dropout_rate": 0.35, "batch_size": 32, "epochs": 200, "learning_rate": 2e-4, "weight_decay": 2e-4, "early_stopping_patience": 22, "activation": "relu"},
+    {"name": "deep_funnel", "hidden_layers": [512, 384, 256, 128, 64], "dropout_rate": 0.35, "batch_size": 32, "epochs": 220, "learning_rate": 2e-4, "weight_decay": 2e-4, "early_stopping_patience": 25, "activation": "leaky_relu"},
+    {"name": "deep_gelu", "hidden_layers": [512, 512, 256, 256, 128], "dropout_rate": 0.4, "batch_size": 32, "epochs": 220, "learning_rate": 1e-4, "weight_decay": 3e-4, "early_stopping_patience": 25, "activation": "gelu"},
+    {"name": "deep_constant_512", "hidden_layers": [512, 512, 512, 512], "dropout_rate": 0.4, "batch_size": 32, "epochs": 240, "learning_rate": 1e-4, "weight_decay": 3e-4, "early_stopping_patience": 25, "activation": "leaky_relu"},
+    {"name": "deep_zigzag", "hidden_layers": [512, 256, 512, 256, 128], "dropout_rate": 0.4, "batch_size": 32, "epochs": 220, "learning_rate": 1e-4, "weight_decay": 2e-4, "early_stopping_patience": 25, "activation": "gelu"},
+
+    {"name": "regularized_light", "hidden_layers": [512, 256, 128], "dropout_rate": 0.45, "batch_size": 64, "epochs": 200, "learning_rate": 3e-4, "weight_decay": 5e-4, "early_stopping_patience": 20, "activation": "relu"},
+    {"name": "regularized_medium", "hidden_layers": [1024, 512, 256], "dropout_rate": 0.5, "batch_size": 32, "epochs": 220, "learning_rate": 2e-4, "weight_decay": 1e-3, "early_stopping_patience": 25, "activation": "leaky_relu"},
+    {"name": "regularized_hard", "hidden_layers": [1024, 512, 256, 128], "dropout_rate": 0.6, "batch_size": 32, "epochs": 250, "learning_rate": 1e-4, "weight_decay": 5e-3, "early_stopping_patience": 30, "activation": "gelu"},
+    {"name": "almost_no_regularization", "hidden_layers": [1024, 512, 256], "dropout_rate": 0.05, "batch_size": 64, "epochs": 180, "learning_rate": 3e-4, "weight_decay": 1e-6, "early_stopping_patience": 20, "activation": "leaky_relu"},
+    {"name": "no_dropout_test", "hidden_layers": [512, 256, 128], "dropout_rate": 0.0, "batch_size": 64, "epochs": 180, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 18, "activation": "relu"},
+
+    {"name": "small_batch_8", "hidden_layers": [512, 256, 128], "dropout_rate": 0.35, "batch_size": 8, "epochs": 180, "learning_rate": 1e-4, "weight_decay": 2e-4, "early_stopping_patience": 20, "activation": "leaky_relu"},
+    {"name": "small_batch_16", "hidden_layers": [1024, 512, 256], "dropout_rate": 0.4, "batch_size": 16, "epochs": 200, "learning_rate": 1e-4, "weight_decay": 2e-4, "early_stopping_patience": 22, "activation": "gelu"},
+    {"name": "large_batch_128", "hidden_layers": [512, 256, 128], "dropout_rate": 0.3, "batch_size": 128, "epochs": 200, "learning_rate": 1e-3, "weight_decay": 1e-4, "early_stopping_patience": 20, "activation": "relu"},
+    {"name": "large_batch_256", "hidden_layers": [1024, 512, 256], "dropout_rate": 0.35, "batch_size": 256, "epochs": 220, "learning_rate": 2e-3, "weight_decay": 2e-4, "early_stopping_patience": 25, "activation": "leaky_relu"},
+    {"name": "very_large_batch", "hidden_layers": [2048, 1024, 512], "dropout_rate": 0.4, "batch_size": 512, "epochs": 250, "learning_rate": 2e-3, "weight_decay": 3e-4, "early_stopping_patience": 25, "activation": "gelu"},
+
+    {"name": "high_lr_test", "hidden_layers": [256, 128, 64], "dropout_rate": 0.35, "batch_size": 64, "epochs": 120, "learning_rate": 5e-3, "weight_decay": 1e-4, "early_stopping_patience": 10, "activation": "relu"},
+    {"name": "very_high_lr_test", "hidden_layers": [128, 64], "dropout_rate": 0.4, "batch_size": 128, "epochs": 100, "learning_rate": 1e-2, "weight_decay": 1e-4, "early_stopping_patience": 8, "activation": "relu"},
+    {"name": "low_lr_test", "hidden_layers": [1024, 512, 256], "dropout_rate": 0.3, "batch_size": 32, "epochs": 300, "learning_rate": 5e-5, "weight_decay": 1e-4, "early_stopping_patience": 30, "activation": "leaky_relu"},
+    {"name": "very_low_lr_test", "hidden_layers": [2048, 1024, 512, 256], "dropout_rate": 0.3, "batch_size": 32, "epochs": 400, "learning_rate": 1e-5, "weight_decay": 1e-4, "early_stopping_patience": 35, "activation": "gelu"},
+
+    {"name": "deli_1453", "hidden_layers": [2048, 1024, 512, 256, 128], "dropout_rate": 0.25, "batch_size": 64, "epochs": 200, "learning_rate": 5e-4, "weight_decay": 1e-4, "early_stopping_patience": 20, "activation": "leaky_relu"},
+    {"name": "deli_1453_v2", "hidden_layers": [4096, 2048, 1024, 512, 256, 128], "dropout_rate": 0.25, "batch_size": 64, "epochs": 400, "learning_rate": 1e-5, "weight_decay": 1e-4, "early_stopping_patience": 15, "activation": "leaky_relu"},
+    {"name": "deli_1453_v3", "hidden_layers": [4096, 4096, 2048, 1024, 512, 256], "dropout_rate": 0.4, "batch_size": 16, "epochs": 350, "learning_rate": 5e-5, "weight_decay": 3e-4, "early_stopping_patience": 30, "activation": "gelu"},
+    {"name": "deli_1453_v4", "hidden_layers": [8192, 4096, 2048, 1024, 512, 256, 128], "dropout_rate": 0.5, "batch_size": 8, "epochs": 400, "learning_rate": 2e-5, "weight_decay": 5e-4, "early_stopping_patience": 35, "activation": "leaky_relu"},
+    {"name": "deli_1453_v5", "hidden_layers": [8192, 8192, 4096, 2048, 1024, 512], "dropout_rate": 0.55, "batch_size": 4, "epochs": 500, "learning_rate": 1e-5, "weight_decay": 1e-3, "early_stopping_patience": 40, "activation": "gelu"},
+    {"name": "deli_1453_hourglass", "hidden_layers": [4096, 1024, 256, 1024, 4096, 512], "dropout_rate": 0.5, "batch_size": 8, "epochs": 400, "learning_rate": 2e-5, "weight_decay": 5e-4, "early_stopping_patience": 35, "activation": "leaky_relu"},
+    {"name": "deli_1453_zigzag", "hidden_layers": [2048, 512, 2048, 512, 1024, 256, 128], "dropout_rate": 0.45, "batch_size": 16, "epochs": 350, "learning_rate": 5e-5, "weight_decay": 3e-4, "early_stopping_patience": 30, "activation": "gelu"}
 ]
 
 # Global seed for reproducibility
@@ -89,22 +126,22 @@ print("\n" + "=" * 60)
 print("1. LOAD DATA")
 print("=" * 60)
 
-# Load images.npy and labels.txt
-images = np.load("images.npy")  # Shape: (N, 48, 48, 3)
+# Load images.npy with memory mapping and labels.txt
+images = np.load("images.npy", mmap_mode="r")  # Shape: (N, 224, 224, 3)
 with open("labels.txt", "r") as f:
     labels = [line.strip() for line in f.readlines()]
 
-print(f"Images loaded: {images.shape}")
+print(f"Images memory-mapped: {images.shape}")
 print(f"Labels loaded: {len(labels)} samples")
 print(f"First 5 labels: {labels[:5]}")
 print(f"Unique labels: {len(np.unique(labels))}")
 
 # ============================================
-# 2. DATA PREPROCESSING
+# 2. DATA PREPROCESSING & INDEX SPLITTING
 # ============================================
 
 print("\n" + "=" * 60)
-print("2. DATA PREPROCESSING")
+print("2. DATA PREPROCESSING & INDEX SPLITTING")
 print("=" * 60)
 
 # Encode labels
@@ -114,28 +151,10 @@ num_classes = len(np.unique(encoded_labels))
 
 print(f"Labels encoded: {num_classes} classes")
 
-# Flatten images (48*48*3 = 6912 features)
-images_flat = images.reshape(images.shape[0], -1)
-print(f"Images flattened: {images_flat.shape}")
-
-# Normalize data: mean=0, std=1 (standard scaling)
-mean = images_flat.mean()
-std = images_flat.std()
-images_flat = (images_flat - mean) / (std + 1e-8)
-print(f"Data normalized: mean={mean:.4f}, std={std:.4f}")
-print(f"After norm - min={images_flat.min():.4f}, max={images_flat.max():.4f}")
-
-# ============================================
-# 3. TRAIN-VAL-TEST SPLIT
-# ============================================
-
-print("\n" + "=" * 60)
-print("3. TRAIN-VAL-TEST SPLIT")
-print("=" * 60)
-
-# Train-Test split
-X_train_val, X_test, y_train_val, y_test = train_test_split(
-    images_flat,
+# Train-Test split on indices
+indices = np.arange(len(images))
+train_val_idx, test_idx, y_train_val, y_test = train_test_split(
+    indices,
     encoded_labels,
     test_size=TEST_SIZE,
     stratify=encoded_labels,
@@ -143,30 +162,80 @@ X_train_val, X_test, y_train_val, y_test = train_test_split(
     shuffle=True,
 )
 
-# Train-Val split
-X_train, X_val, y_train, y_val = train_test_split(
-    X_train_val,
+# Train-Val split on indices
+train_idx, val_idx, y_train, y_val = train_test_split(
+    train_val_idx,
     y_train_val,
     test_size=VAL_SIZE,
     random_state=42,
     shuffle=True,
 )
 
-print(f"Train: {X_train.shape[0]} ({100*X_train.shape[0]/len(images_flat):.1f}%)")
-print(f"Val:   {X_val.shape[0]} ({100*X_val.shape[0]/len(images_flat):.1f}%)")
-print(f"Test:  {X_test.shape[0]} ({100*X_test.shape[0]/len(images_flat):.1f}%)")
+print(f"Train: {len(train_idx)} ({100*len(train_idx)/len(images):.1f}%)")
+print(f"Val:   {len(val_idx)} ({100*len(val_idx)/len(images):.1f}%)")
+print(f"Test:  {len(test_idx)} ({100*len(test_idx)/len(images):.1f}%)")
 
-# Convert to PyTorch tensors
-X_train_tensor = torch.FloatTensor(X_train)
-y_train_tensor = torch.LongTensor(y_train)
+# Memory-efficient chunked computation of mean & std on Train Set
+def compute_mean_std_chunked(mmap_images, indices, chunk_size=500):
+    total_sum = 0.0
+    total_sq_sum = 0.0
+    num_elements = 0
+    img_size = np.prod(mmap_images.shape[1:])
+    
+    for i in range(0, len(indices), chunk_size):
+        chunk_indices = indices[i : i + chunk_size]
+        chunk = mmap_images[chunk_indices].astype(np.float64)
+        total_sum += chunk.sum()
+        total_sq_sum += (chunk ** 2).sum()
+        num_elements += len(chunk_indices) * img_size
+        
+    mean = total_sum / num_elements
+    var = (total_sq_sum / num_elements) - (mean ** 2)
+    std = np.sqrt(max(var, 0.0))
+    return mean, std
 
-X_val_tensor = torch.FloatTensor(X_val)
-y_val_tensor = torch.LongTensor(y_val)
+def compute_min_max_chunked(mmap_images, indices, mean, std, chunk_size=500):
+    min_val = float('inf')
+    max_val = float('-inf')
+    for i in range(0, len(indices), chunk_size):
+        chunk_indices = indices[i : i + chunk_size]
+        chunk = mmap_images[chunk_indices].astype(np.float32)
+        chunk_norm = (chunk - mean) / (std + 1e-8)
+        min_val = min(min_val, chunk_norm.min())
+        max_val = max(max_val, chunk_norm.max())
+    return min_val, max_val
 
-X_test_tensor = torch.FloatTensor(X_test)
-y_test_tensor = torch.LongTensor(y_test)
+print("Calculating normalization statistics from Train set...")
+mean, std = compute_mean_std_chunked(images, train_idx, chunk_size=500)
+min_val, max_val = compute_min_max_chunked(images, train_idx, mean, std)
+print(f"Data normalized: mean={mean:.4f}, std={std:.4f}")
+print(f"After norm (Train) - min={min_val:.4f}, max={max_val:.4f}")
 
-print(f"DataLoaders created")
+# Define the custom Dataset
+class FaceDataset(torch.utils.data.Dataset):
+    def __init__(self, mmap_images, indices, labels, mean, std):
+        self.mmap_images = mmap_images
+        self.indices = indices
+        self.labels = labels
+        self.mean = mean
+        self.std = std
+        self.input_dim = np.prod(mmap_images.shape[1:])
+
+    def __len__(self):
+        return len(self.indices)
+
+    def __getitem__(self, idx):
+        real_idx = self.indices[idx]
+        img = np.array(self.mmap_images[real_idx], dtype=np.float32).flatten()
+        img_norm = (img - self.mean) / (self.std + 1e-8)
+        label = self.labels[idx]
+        return torch.tensor(img_norm, dtype=torch.float32), torch.tensor(label, dtype=torch.long)
+
+train_dataset = FaceDataset(images, train_idx, y_train, mean, std)
+val_dataset = FaceDataset(images, val_idx, y_val, mean, std)
+test_dataset = FaceDataset(images, test_idx, y_test, mean, std)
+
+print(f"DataLoaders and Datasets created")
 
 # ============================================
 # 4. BUILD MLP MODEL
@@ -202,7 +271,7 @@ class MLPModel(nn.Module):
     def forward(self, x):
         return self.network(x)
 
-input_dim = X_train_tensor.shape[1]  # 6912
+input_dim = train_dataset.input_dim
 model = MLPModel(input_dim, HIDDEN_LAYERS, num_classes, DROPOUT_RATE)
 model = model.to(DEVICE)
 
@@ -220,9 +289,7 @@ print("=" * 60)
 loss_fn = nn.CrossEntropyLoss()
 
 # Build data loaders once for the fixed splits
-train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
-val_dataset = TensorDataset(X_val_tensor, y_val_tensor)
-test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
+# (train_dataset, val_dataset, test_dataset are already initialized)
 
 best_result = None
 
@@ -501,9 +568,9 @@ with open(OUTPUT_DIR / "training_summary.txt", "w") as f:
     f.write(f"  Weight decay: {best_result['config']['weight_decay']}\n\n")
 
     f.write("DATA:\n")
-    f.write(f"  Train: {X_train.shape[0]}\n")
-    f.write(f"  Val: {X_val.shape[0]}\n")
-    f.write(f"  Test: {X_test.shape[0]}\n")
+    f.write(f"  Train: {len(train_idx)}\n")
+    f.write(f"  Val: {len(val_idx)}\n")
+    f.write(f"  Test: {len(test_idx)}\n")
     f.write(f"  Classes: {num_classes}\n\n")
 
     f.write("RESULTS:\n")
